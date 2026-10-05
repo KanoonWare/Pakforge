@@ -16,6 +16,9 @@ ENV/
 /build/
 /dist/
 
+# Historical local snapshots
+/archive/
+
 # PakForge downloads and local settings
 downloads/
 pakforge_config.json
