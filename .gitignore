@@ -1,0 +1,47 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local Python environments
+.venv/
+venv/
+env/
+ENV/
+
+# PyInstaller output
+/build/
+/dist/
+
+# PakForge downloads and local settings
+downloads/
+pakforge_config.json
+
+# Local environment variables, credentials, and logs
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.log
+
+# Downloaded texture packs and game images
+*.zip
+*.7z
+*.rar
+*.iso
+*.cso
+*.chd
+*.n64
+*.z64
+*.v64
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
