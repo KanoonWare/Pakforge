@@ -217,5 +217,19 @@ N64_GAMES = [
             },
         ]
     },
+    {
+        "game_id": "CONKER BFD",
+        "title": "Conker's Bad Fur Day",
+        "cover_url": "https://www.arcadeartwork.org/action.php?id=82277&part=e&download",
+        "packs": [
+            {
+                "pack_id": "bad_fur_day_4k_ultimate_tex_pack",
+                "pack_name": "Conker 4K Ultimate Texture Pack",
+                "download_url": "https://github.com/GameBeast92/Conker-s-Bad-Fur-Day-4k-Ultimate-Texture-Pack/releases/download/v2601/CONKER.BFD_HIRESTEXTURES.htc",
+                "credit_name": "GameBeast92",
+                "credit_url": "https://github.com/GameBeast92",
+            },
+        ]
+    },
 
 ]

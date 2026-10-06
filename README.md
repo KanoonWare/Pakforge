@@ -61,4 +61,4 @@ If you are a texture pack creator and would like your work credited differently 
 
 ## License
 
-The project license has not been selected yet, and there is currently no `LICENSE` file. Third-party texture packs, cover art, and linked content are not covered by any future PakForge code license.
+PakForge is licensed under the MIT License; see [`LICENSE`](LICENSE) for the full terms. Third-party texture packs, cover art, and linked content are not covered by this license.
