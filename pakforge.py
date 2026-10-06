@@ -9,6 +9,7 @@ import webbrowser
 import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
+from urllib.parse import unquote, urlsplit
 
 import customtkinter as ctk
 import requests
@@ -35,6 +36,25 @@ CONSOLES = [
     {"id": "xbox", "name": "Xbox", "active": False, "games": []},
     {"id": "psp", "name": "PSP", "active": False, "games": []},
 ]
+
+
+def is_htc_url(url):
+    return unquote(urlsplit(url).path).lower().endswith(".htc")
+
+
+def get_download_extension(url):
+    if is_htc_url(url):
+        return ".htc"
+    if ".7z" in url.lower():
+        return ".7z"
+    if ".rar" in url.lower():
+        return ".rar"
+    return ".zip"
+
+
+def get_download_filename(url):
+    return os.path.basename(unquote(urlsplit(url).path))
+
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("dark-blue")
@@ -603,26 +623,38 @@ class PakForge(ctk.CTk):
             else:
                 card.configure(border_color=COLORS["line"], border_width=1)
 
-    def check_pack_status(self, game_id, pack_id, console_id):
+    def check_pack_status(self, game_id, pack_id, console_id, download_url):
         staging_dir = self.get_console_staging_dir(console_id, create_if_missing=False)
-        has_zip = False
+        has_staged_file = False
+        is_htc = is_htc_url(download_url)
+        extensions = [".zip", ".7z", ".rar"]
+        if is_htc:
+            extensions.append(".htc")
         if os.path.exists(staging_dir):
-            for ext in [".zip", ".7z", ".rar"]:
+            for ext in extensions:
                 if os.path.isfile(os.path.join(staging_dir, f"{game_id}_{pack_id}{ext}")):
-                    has_zip = True
+                    has_staged_file = True
                     break
 
         texture_path = self.console_paths[console_id].get()
-        extracted_dir = os.path.join(texture_path, game_id, "replacement")
-        
         meta = self.replacements.get(game_id, {})
-        has_extracted = (
-            os.path.isdir(extracted_dir) 
-            and len(os.listdir(extracted_dir)) > 0 
-            and meta.get("active_pack_id") == pack_id
-        )
+        if is_htc:
+            installed_file = os.path.join(
+                texture_path, game_id, get_download_filename(download_url)
+            )
+            has_extracted = (
+                os.path.isfile(installed_file)
+                and meta.get("active_pack_id") == pack_id
+            )
+        else:
+            extracted_dir = os.path.join(texture_path, game_id, "replacement")
+            has_extracted = (
+                os.path.isdir(extracted_dir)
+                and len(os.listdir(extracted_dir)) > 0
+                and meta.get("active_pack_id") == pack_id
+            )
 
-        return has_zip, has_extracted
+        return has_staged_file, has_extracted
 
     def create_game_card(self, game, console_id):
         cover_url = game["cover_url"].format(game_id=game["game_id"])
@@ -732,7 +764,10 @@ class PakForge(ctk.CTk):
         action_frame = ctk.CTkFrame(card, fg_color="transparent")
         action_frame.pack(side="right", padx=12, pady=12)
 
-        has_zip, has_extracted = self.check_pack_status(game["game_id"], active_pack["pack_id"], console_id)
+        has_staged_file, has_extracted = self.check_pack_status(
+            game["game_id"], active_pack["pack_id"], console_id,
+            active_pack["download_url"],
+        )
 
         status_label = ctk.CTkLabel(
             action_frame, text="", font=(FONT_FAMILY, 10),
@@ -754,7 +789,10 @@ class PakForge(ctk.CTk):
 
     def refresh_card_actions(self, game, console_id, progress_bar, status_label, btn_container):
         active_pack = self.get_selected_pack(game)
-        has_zip, has_extracted = self.check_pack_status(game["game_id"], active_pack["pack_id"], console_id)
+        has_staged_file, has_extracted = self.check_pack_status(
+            game["game_id"], active_pack["pack_id"], console_id,
+            active_pack["download_url"],
+        )
 
         meta = self.replacements.get(game["game_id"], {})
         ts = meta.get("timestamp")
@@ -763,16 +801,16 @@ class PakForge(ctk.CTk):
             status_text = f"Replaced!\n({ts})"
         elif has_extracted:
             status_text = "Replaced!"
-        elif has_zip:
+        elif has_staged_file:
             status_text = "Downloaded!"
         else:
             status_text = "Ready"
 
-        status_color = COLORS["mint"] if (has_extracted or has_zip) else COLORS["muted"]
+        status_color = COLORS["mint"] if (has_extracted or has_staged_file) else COLORS["muted"]
         status_label.configure(text=status_text, text_color=status_color)
-        progress_bar.set(1.0 if (has_zip or has_extracted) else 0)
+        progress_bar.set(1.0 if (has_staged_file or has_extracted) else 0)
 
-        if has_zip or has_extracted:
+        if has_staged_file or has_extracted:
             self.show_action_buttons(game, console_id, progress_bar, status_label, btn_container)
         else:
             self.reset_download_button(game, console_id, progress_bar, status_label, btn_container)
@@ -828,11 +866,7 @@ class PakForge(ctk.CTk):
         active_pack = self.get_selected_pack(game)
         url = active_pack["download_url"]
         
-        ext = ".zip"
-        if ".7z" in url.lower():
-            ext = ".7z"
-        elif ".rar" in url.lower():
-            ext = ".rar"
+        ext = get_download_extension(url)
 
         staging_dir = self.get_console_staging_dir(console_id, create_if_missing=True)
         local_file = os.path.join(staging_dir, f"{game['game_id']}_{active_pack['pack_id']}{ext}")
@@ -948,7 +982,10 @@ class PakForge(ctk.CTk):
             child.destroy()
 
         active_pack = self.get_selected_pack(game)
-        has_zip, has_extracted = self.check_pack_status(game["game_id"], active_pack["pack_id"], console_id)
+        has_staged_file, has_extracted = self.check_pack_status(
+            game["game_id"], active_pack["pack_id"], console_id,
+            active_pack["download_url"],
+        )
 
         delete_btn_text = "Remove Staging" if has_extracted else "Delete Textures"
 
@@ -965,7 +1002,7 @@ class PakForge(ctk.CTk):
         )
         delete_btn.pack(side="left", padx=2)
 
-        if has_zip:
+        if has_staged_file:
             replace_btn_text = "Replace Again" if has_extracted else "Replace Textures"
             replace_btn = ctk.CTkButton(
                 btn_container,
@@ -985,7 +1022,10 @@ class PakForge(ctk.CTk):
         staging_dir = self.get_console_staging_dir(console_id, create_if_missing=False)
         
         if os.path.exists(staging_dir):
-            for ext in [".zip", ".7z", ".rar"]:
+            extensions = [".zip", ".7z", ".rar"]
+            if is_htc_url(active_pack["download_url"]):
+                extensions.append(".htc")
+            for ext in extensions:
                 target_file = os.path.join(staging_dir, f"{game['game_id']}_{active_pack['pack_id']}{ext}")
                 if os.path.exists(target_file):
                     try:
@@ -996,7 +1036,10 @@ class PakForge(ctk.CTk):
 
         self.refresh_downloaded_list()
         
-        has_zip, has_extracted = self.check_pack_status(game["game_id"], active_pack["pack_id"], console_id)
+        has_staged_file, has_extracted = self.check_pack_status(
+            game["game_id"], active_pack["pack_id"], console_id,
+            active_pack["download_url"],
+        )
 
         if has_extracted:
             meta = self.replacements.get(game["game_id"], {})
@@ -1017,13 +1060,20 @@ class PakForge(ctk.CTk):
         ).start()
 
     def extract_task(self, game, console_id, progress_bar, status_label):
-        status_label.configure(text="Extracting...", text_color=COLORS["text"])
         active_pack = self.get_selected_pack(game)
+        is_htc = is_htc_url(active_pack["download_url"])
+        status_label.configure(
+            text="Installing..." if is_htc else "Extracting...",
+            text_color=COLORS["text"],
+        )
         staging_dir = self.get_console_staging_dir(console_id, create_if_missing=False)
         
         local_archive = None
         if os.path.exists(staging_dir):
-            for ext in [".zip", ".7z", ".rar"]:
+            extensions = [".zip", ".7z", ".rar"]
+            if is_htc:
+                extensions.append(".htc")
+            for ext in extensions:
                 candidate = os.path.join(staging_dir, f"{game['game_id']}_{active_pack['pack_id']}{ext}")
                 if os.path.exists(candidate):
                     local_archive = candidate
@@ -1031,40 +1081,50 @@ class PakForge(ctk.CTk):
 
         if not local_archive:
             status_label.configure(text="File Missing!", text_color=COLORS["danger"])
-            self.log_debug("Extraction failed: Staging archive missing.")
+            action = "Installation" if is_htc else "Extraction"
+            self.log_debug(f"{action} failed: Staging file missing.")
             return
 
         texture_path = self.console_paths[console_id].get()
-        target_dir = os.path.join(texture_path, game["game_id"], "replacement")
+        if is_htc:
+            target_dir = os.path.join(texture_path, game["game_id"])
+        else:
+            target_dir = os.path.join(texture_path, game["game_id"], "replacement")
 
         try:
             os.makedirs(target_dir, exist_ok=True)
-            self.log_debug(f"Extracting archive into target directory: {target_dir}")
-
             extracted_count = 0
-            if zipfile.is_zipfile(local_archive):
-                with zipfile.ZipFile(local_archive, "r") as zip_ref:
-                    for member in zip_ref.infolist():
-                        if member.is_dir():
-                            continue
-                        filename = os.path.basename(member.filename)
-                        if filename:
-                            dest_path = os.path.join(target_dir, filename)
-                            with zip_ref.open(member) as source, open(dest_path, "wb") as target:
-                                shutil.copyfileobj(source, target)
-                            extracted_count += 1
+            if is_htc:
+                filename = get_download_filename(active_pack["download_url"])
+                if not filename:
+                    raise ValueError("The HTC download URL does not include a filename.")
+                dest_path = os.path.join(target_dir, filename)
+                shutil.copy2(local_archive, dest_path)
+                extracted_count = 1
+                self.log_debug(f"Installing HTC file into game directory: {target_dir}")
             else:
-                shutil.unpack_archive(local_archive, target_dir)
-                extracted_count = len(os.listdir(target_dir))
+                self.log_debug(f"Extracting archive into target directory: {target_dir}")
+                if zipfile.is_zipfile(local_archive):
+                    with zipfile.ZipFile(local_archive, "r") as zip_ref:
+                        for member in zip_ref.infolist():
+                            if member.is_dir():
+                                continue
+                            filename = os.path.basename(member.filename)
+                            if filename:
+                                dest_path = os.path.join(target_dir, filename)
+                                with zip_ref.open(member) as source, open(dest_path, "wb") as target:
+                                    shutil.copyfileobj(source, target)
+                                extracted_count += 1
+                else:
+                    shutil.unpack_archive(local_archive, target_dir)
+                    extracted_count = len(os.listdir(target_dir))
 
             self.record_replacement_timestamp(game["game_id"], active_pack["pack_id"])
             ts = self.replacements[game["game_id"]]["timestamp"]
 
             status_label.configure(text=f"Replaced!\n({ts})", text_color=COLORS["mint"])
-            self.log_debug(
-                f"Extraction and replacement completed successfully! "
-                f"({extracted_count} files written)"
-            )
+            action = "Installation" if is_htc else "Extraction and replacement"
+            self.log_debug(f"{action} completed successfully! ({extracted_count} files written)")
 
             self.after(0, lambda: self.show_open_folder_button(target_dir, status_label))
 
@@ -1079,8 +1139,12 @@ class PakForge(ctk.CTk):
             )
 
         except Exception as err:
-            status_label.configure(text="Extract Failed!", text_color=COLORS["danger"])
-            self.log_debug(f"Extraction Error [{game['game_id']}]: {err}")
+            status_label.configure(
+                text="Install Failed!" if is_htc else "Extract Failed!",
+                text_color=COLORS["danger"],
+            )
+            action = "Installation" if is_htc else "Extraction"
+            self.log_debug(f"{action} Error [{game['game_id']}]: {err}")
 
     def show_open_folder_button(self, target_dir, status_label):
         for widget in status_label.master.winfo_children():
